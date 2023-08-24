@@ -70,6 +70,7 @@ fn read_entire_xml_file<P: AsRef<Path>>(file_path: P) -> io::Result<String> {
     let file = File::open(file_path)?;
     let er = EventReader::new(file);
     let mut content = String::new();
+
     for event in er.into_iter() {
         if let XmlEvent::Characters(text) = event.expect("TODO") {
             content.push_str(&text);
