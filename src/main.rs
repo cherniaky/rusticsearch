@@ -1,12 +1,11 @@
-use std::io;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use xml::reader::{XmlEvent, EventReader};
 use std::collections::HashMap;
+use std::env;
+use std::fs::{self, File};
+use std::io;
+use std::path::{Path, PathBuf};
+use std::process::exit;
+use xml::reader::{EventReader, XmlEvent};
 
-use serde_json::Result;
-
-#[derive(Debug)]
 struct Lexer<'a> {
     content: &'a [char],
 }
@@ -28,7 +27,10 @@ impl<'a> Lexer<'a> {
         token
     }
 
-    fn chop_while<P>(&mut self, mut predicate: P) -> &'a [char] where P: FnMut(&char) -> bool {
+    fn chop_while<P>(&mut self, mut predicate: P) -> &'a [char]
+    where
+        P: FnMut(&char) -> bool,
+    {
         let mut n = 0;
         while n < self.content.len() && predicate(&self.content[n]) {
             n += 1;
@@ -39,7 +41,7 @@ impl<'a> Lexer<'a> {
     fn next_token(&mut self) -> Option<&'a [char]> {
         self.trim_left();
         if self.content.len() == 0 {
-            return None
+            return None;
         }
 
         if self.content[0].is_numeric() {
@@ -62,10 +64,6 @@ impl<'a> Iterator for Lexer<'a> {
     }
 }
 
-fn index_document(_doc_content: &str) -> HashMap<String, usize> {
-    todo!("not implemented");
-}
-
 fn read_entire_xml_file<P: AsRef<Path>>(file_path: P) -> io::Result<String> {
     let file = File::open(file_path)?;
     let er = EventReader::new(file);
@@ -80,22 +78,22 @@ fn read_entire_xml_file<P: AsRef<Path>>(file_path: P) -> io::Result<String> {
     Ok(content)
 }
 
-type TermFreq = HashMap::<String, usize>;
+type TermFreq = HashMap<String, usize>;
 type TermFreqIndex = HashMap<PathBuf, TermFreq>;
 
-fn main2() -> io::Result<()> {
-    let index_path = "index.json";
+fn check_index(index_path: &str) -> io::Result<()> {
     let index_file = File::open(index_path)?;
     println!("Reading {index_path} index file...");
     let tf_index: TermFreqIndex = serde_json::from_reader(index_file).expect("serde does not fail");
-    println!("{index_path} contains {count} files", count = tf_index.len());
+    println!(
+        "{index_path} contains {count} files",
+        count = tf_index.len()
+    );
     Ok(())
 }
 
-fn main() -> io::Result<()> {
-    let dir_path = "docs.gl/gl4";
+fn index_folder(dir_path: &str) -> io::Result<()> {
     let dir = fs::read_dir(dir_path)?;
-    let top_n = 20;
     let mut tf_index = TermFreqIndex::new();
 
     for file in dir {
@@ -110,7 +108,10 @@ fn main() -> io::Result<()> {
         let mut tf = TermFreq::new();
 
         for token in Lexer::new(&content) {
-            let term = token.iter().map(|x| x.to_ascii_uppercase()).collect::<String>();
+            let term = token
+                .iter()
+                .map(|x| x.to_ascii_uppercase())
+                .collect::<String>();
             if let Some(freq) = tf.get_mut(&term) {
                 *freq += 1;
             } else {
@@ -127,4 +128,42 @@ fn main() -> io::Result<()> {
     serde_json::to_writer(index_file, &tf_index).expect("serde works fine");
 
     Ok(())
+}
+
+fn main() {
+    let mut args = env::args();
+    let _program = args.next().expect("path to program is provided");
+
+    let subcommand = args.next().unwrap_or_else(|| {
+        println!("ERROR: no subcommand was provided");
+        exit(1)
+    });
+
+    match subcommand.as_str() {
+        "index" => {
+            let dir_path = args.next().unwrap_or_else(|| {
+                println!("ERROR: no directory is provided for {subcommand} subcommand");
+                exit(1);
+            });
+
+            index_folder(&dir_path).unwrap_or_else(|err| {
+                println!("ERROR: could not index folder {dir_path}: {err}");
+                exit(1);
+            });
+        }
+        "search" => {
+            let index_path = args.next().unwrap_or_else(|| {
+                println!("ERROR: no path to index is provided for {subcommand} subcommand");
+                exit(1);
+            });
+            check_index(&index_path).unwrap_or_else(|err| {
+                println!("ERROR: could not check index file {index_path}: {err}");
+                exit(1);
+            });
+        }
+        _ => {
+            println!("ERROR: unknown subcommand {subcommand}");
+            exit(1)
+        }
+    }
 }
