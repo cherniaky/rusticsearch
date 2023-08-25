@@ -69,6 +69,7 @@ fn index_document(_doc_content: &str) -> HashMap<String, usize> {
 fn read_entire_xml_file<P: AsRef<Path>>(file_path: P) -> io::Result<String> {
     let file = File::open(file_path)?;
     let er = EventReader::new(file);
+
     let mut content = String::new();
 
     for event in er.into_iter() {
