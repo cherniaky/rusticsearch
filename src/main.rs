@@ -16,7 +16,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn trim_left(&mut self) {
-        while self.content.len() > 0 && self.content[0].is_whitespace() {
+        while !self.content.is_empty() && self.content[0].is_whitespace() {
             self.content = &self.content[1..];
         }
     }
@@ -40,7 +40,7 @@ impl<'a> Lexer<'a> {
 
     fn next_token(&mut self) -> Option<&'a [char]> {
         self.trim_left();
-        if self.content.len() == 0 {
+        if self.content.is_empty() {
             return None;
         }
 
@@ -65,7 +65,7 @@ impl<'a> Iterator for Lexer<'a> {
 }
 
 fn parse_entire_xml_file(file_path: &Path) -> Result<String, ()> {
-    let file = File::open(&file_path).map_err(|err| {
+    let file = File::open(file_path).map_err(|err| {
         println!(
             "ERROR: could not open file {file_path}: {err}",
             file_path = file_path.display()
@@ -88,7 +88,7 @@ fn parse_entire_xml_file(file_path: &Path) -> Result<String, ()> {
 
         if let XmlEvent::Characters(text) = event {
             content.push_str(&text);
-            content.push_str(" ");
+            content.push(' ');
         }
     }
     Ok(content)
