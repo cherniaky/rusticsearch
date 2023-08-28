@@ -227,9 +227,9 @@ fn tf(t: &str, d: &TermFreq) -> f32 {
 }
 
 fn idf(t: &str, d: &TermFreqIndex) -> f32 {
-    let N = d.len() as f32;
-    let M = d.values().filter(|tf| tf.contains_key(t)).count().max(1) as f32;
-    return (N / M).log10();
+    let n = d.len() as f32;
+    let m = d.values().filter(|tf| tf.contains_key(t)).count().max(1) as f32;
+    return (n / m).log10();
 }
 
 fn serve_request(tf_index: &TermFreqIndex, mut request: Request) -> Result<(), ()> {
@@ -242,7 +242,9 @@ fn serve_request(tf_index: &TermFreqIndex, mut request: Request) -> Result<(), (
     match (request.method(), request.url()) {
         (Method::Post, "/api/search") => {
             let mut buf = Vec::new();
-            request.as_reader().read_to_end(&mut buf);
+            request.as_reader().read_to_end(&mut buf).map_err(|err| {
+                eprintln!("ERROR: could not read the body of request: {err}");
+            })?;
             let body = str::from_utf8(&buf)
                 .map_err(|err| {
                     eprintln!("ERROR: could not interpret body as UTF-8 string: {err}");
@@ -260,11 +262,17 @@ fn serve_request(tf_index: &TermFreqIndex, mut request: Request) -> Result<(), (
             }
             result.sort_by(|(_, rank1), (_, rank2)| rank1.partial_cmp(rank2).unwrap());
             result.reverse();
-            for (path, rank) in result.iter().take(10) {
-                println!("{path} => {rank}", path = path.display());
-            }
-            request.respond(Response::from_string("ok")).map_err(|err| {
-                eprintln!("ERROR: {err}");
+
+            let json = serde_json::to_string(&result.iter().take(20).collect::<Vec<_>>()).map_err(|err| {
+                eprintln!("ERROR: could not convert search results to JSON: {err}");
+            })?;
+
+            let content_type_header = Header::from_bytes("Content-Type", "application/json")
+                .expect("That we didn't put any garbage in the headers");
+            let response = Response::from_string(&json)
+                .with_header(content_type_header);
+            request.respond(response).map_err(|err| {
+                eprintln!("ERROR: could not serve a request {err}");
             })
         }
         (Method::Get, "/index.js") => {
@@ -328,9 +336,8 @@ fn entry() -> Result<(), ()> {
             println!("INFO: listening at http://{address}/");
 
             for request in server.incoming_requests() {
-                serve_request(&tf_index, request);
+                serve_request(&tf_index, request).ok();
             }
-
         }
         _ => {
             usage(&program);
