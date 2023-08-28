@@ -330,6 +330,7 @@ fn entry() -> Result<(), ()> {
             for request in server.incoming_requests() {
                 serve_request(&tf_index, request);
             }
+
         }
         _ => {
             usage(&program);
