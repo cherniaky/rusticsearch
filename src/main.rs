@@ -146,13 +146,11 @@ fn entry() -> Result<(), ()> {
                 .chars()
                 .collect::<Vec<_>>();
 
-            let index_file = File::open(&index_path).map_err(|err| {
+            let _index_file = File::open(&index_path).map_err(|err| {
                 eprintln!("ERROR: could not open index file {index_path}: {err}");
             })?;
 
-            let model: InMemoryModel = serde_json::from_reader(index_file).map_err(|err| {
-                eprintln!("ERROR: could not parse index file {index_path}: {err}");
-            })?;
+            let model = SqliteModel::open(Path::new(&index_path))?;
 
             for (path, rank) in model.search_query(&prompt)?.iter().take(20) {
                 println!("{path} {rank}", path = path.display());
