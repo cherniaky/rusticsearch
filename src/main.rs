@@ -172,8 +172,6 @@ fn add_folder_to_model(
 fn usage(program: &str) {
     eprintln!("Usage: {program} [SUBCOMMAND] [OPTIONS]");
     eprintln!("Subcommands:");
-    eprintln!("    index <folder>                  index the <folder> and save the index to index.json file");
-    eprintln!("    search <index-file> <query>     search <query> within the <index-file>");
     eprintln!("    serve <folder> [address]        start local HTTP server with Web Interface");
 }
 
@@ -200,77 +198,6 @@ fn entry() -> Result<(), ()> {
     })?;
 
     match subcommand.as_str() {
-        /*
-        "index" => {
-            let dir_path = args.next().ok_or_else(|| {
-                usage(&program);
-                eprintln!("ERROR: no directory is provided for {subcommand} subcommand");
-            })?;
-
-            let mut skipped = 0;
-
-            if use_sqlite_mode {
-                let index_path = "index.db";
-
-                if let Err(err) = fs::remove_file(index_path) {
-                    if err.kind() != std::io::ErrorKind::NotFound {
-                        eprintln!("ERROR: could not delete file {index_path}: {err}");
-                        return Err(());
-                    }
-                }
-
-                let mut model = SqliteModel::open(Path::new(index_path))?;
-                model.begin()?;
-                add_folder_to_model(Path::new(&dir_path), &mut model, &mut skipped)?;
-                model.commit()?;
-            } else {
-                let index_path = "index.json";
-                let mut model = Default::default();
-                add_folder_to_model(Path::new(&dir_path), &mut model, &mut skipped)?;
-                save_model_as_json(&model, index_path)?;
-            }
-
-            println!("Skipped {skipped} files.");
-            Ok(())
-        }
-        "search" => {
-            let index_path = args.next().ok_or_else(|| {
-                usage(&program);
-                eprintln!("ERROR: no path to index is provided for {subcommand} subcommand");
-            })?;
-
-            let prompt = args
-                .next()
-                .ok_or_else(|| {
-                    usage(&program);
-                    eprintln!("ERROR: no search query is provided {subcommand} subcommand");
-                })?
-                .chars()
-                .collect::<Vec<_>>();
-
-            if use_sqlite_mode {
-                let model = SqliteModel::open(Path::new(&index_path))?;
-
-                for (path, rank) in model.search_query(&prompt)?.iter().take(20) {
-                    println!("{path} {rank}", path = path.display());
-                }
-            } else {
-                let index_file = File::open(&index_path).map_err(|err| {
-                    eprintln!("ERROR: could not open index file {index_path}: {err}");
-                })?;
-
-                let model =
-                    serde_json::from_reader::<_, InMemoryModel>(index_file).map_err(|err| {
-                        eprintln!("ERROR: could not parse index file {index_path}: {err}");
-                    })?;
-
-                for (path, rank) in model.search_query(&prompt)?.iter().take(20) {
-                    println!("{path} {rank}", path = path.display());
-                }
-            }
-            Ok(())
-        }
-        */
         "serve" => {
             assert!(!use_sqlite_mode);
             let dir_path = args.next().ok_or_else(|| {
