@@ -3,6 +3,6 @@
 ## Quick Start
 
 ```console
-$ cargo run serve index.json
+$ cargo run serve ./folder
 # open http://localhost:6969/
 ```
