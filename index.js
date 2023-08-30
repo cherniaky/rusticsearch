@@ -1,6 +1,7 @@
 async function search(prompt) {
     const results = document.getElementById("results")
     results.innerHTML = "";
+
     const response = await fetch("/api/search", {
         method: 'POST',
         headers: {'Content-Type': 'text/plain'},
