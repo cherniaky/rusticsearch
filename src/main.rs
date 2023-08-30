@@ -5,13 +5,15 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::result::Result;
 use std::str;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use xml::common::{Position, TextPosition};
 use xml::reader::{EventReader, XmlEvent};
 
 mod model;
 use model::*;
-mod server;
 mod lexer;
+mod server;
 pub mod snowball;
 
 fn parse_entire_txt_file(file_path: &Path) -> Result<String, ()> {
@@ -94,7 +96,7 @@ fn save_model_as_json(model: &InMemoryModel, index_path: &str) -> Result<(), ()>
 
 fn add_folder_to_model(
     dir_path: &Path,
-    model: &mut dyn Model,
+    model: Arc<Mutex<InMemoryModel>>,
     skipped: &mut usize,
 ) -> Result<(), ()> {
     let dir = fs::read_dir(dir_path).map_err(|err| {
@@ -121,22 +123,47 @@ fn add_folder_to_model(
             );
         })?;
 
+        let last_modified = file
+            .metadata()
+            .map_err(|err| {
+                eprintln!(
+                    "ERROR: could not get the metadata of file {file_path}: {err}",
+                    file_path = file_path.display()
+                );
+            })?
+            .modified()
+            .map_err(|err| {
+                eprintln!(
+                    "ERROR: could not get the last modification date of file {file_path}: {err}",
+                    file_path = file_path.display()
+                )
+            })?;
+
         if file_type.is_dir() {
-            add_folder_to_model(&file_path, model, skipped)?;
+            add_folder_to_model(&file_path, Arc::clone(&model), skipped)?;
             continue 'next_file;
         }
 
-        println!("Indexing {:?}...", &file_path);
+        let mut model = model.lock().unwrap();
+        if model.requires_reindexing(&file_path, last_modified)? {
+            println!("Indexing {:?}...", &file_path);
 
-        let content = match parse_entire_file_by_extension(&file_path) {
-            Ok(content) => content.chars().collect::<Vec<_>>(),
-            Err(()) => {
-                *skipped += 1;
-                continue 'next_file;
-            }
-        };
+            let content = match parse_entire_file_by_extension(&file_path) {
+                Ok(content) => content.chars().collect::<Vec<_>>(),
+                Err(()) => {
+                    *skipped += 1;
+                    continue 'next_file;
+                }
+            };
 
-        model.add_document(file_path, &content)?;
+            model.add_document(file_path, last_modified, &content)?;
+        } else {
+            println!(
+                "Ignoring {file_path} cause we already indexed it",
+                file_path = file_path.display()
+            );
+            *skipped += 1;
+        }
     }
 
     Ok(())
@@ -147,7 +174,7 @@ fn usage(program: &str) {
     eprintln!("Subcommands:");
     eprintln!("    index <folder>                  index the <folder> and save the index to index.json file");
     eprintln!("    search <index-file> <query>     search <query> within the <index-file>");
-    eprintln!("    serve <index-file> [address]    start local HTTP server with Web Interface");
+    eprintln!("    serve <folder> [address]        start local HTTP server with Web Interface");
 }
 
 fn entry() -> Result<(), ()> {
@@ -173,6 +200,7 @@ fn entry() -> Result<(), ()> {
     })?;
 
     match subcommand.as_str() {
+        /*
         "index" => {
             let dir_path = args.next().ok_or_else(|| {
                 usage(&program);
@@ -242,29 +270,49 @@ fn entry() -> Result<(), ()> {
             }
             Ok(())
         }
+        */
         "serve" => {
-            let index_path = args.next().ok_or_else(|| {
+            assert!(!use_sqlite_mode);
+            let dir_path = args.next().ok_or_else(|| {
                 usage(&program);
-                eprintln!("ERROR: no path to index is provided for {subcommand} subcommand");
+                eprintln!("ERROR: no folder is provided for {subcommand} subcommand");
             })?;
+
+            let index_path = "index.json";
 
             let address = args.next().unwrap_or("127.0.0.1:6969".to_string());
 
-            if use_sqlite_mode {
-                let model = SqliteModel::open(Path::new(&index_path))?;
-
-                server::start(&address, &model)
-            } else {
+            let exists = Path::new(index_path).try_exists().map_err(|err| {
+                eprintln!("ERROR: could not check the existence of file {index_path}: {err}");
+            })?;
+            let model: Arc<Mutex<InMemoryModel>>;
+            if exists {
                 let index_file = File::open(&index_path).map_err(|err| {
                     eprintln!("ERROR: could not open index file {index_path}: {err}");
                 })?;
 
-                let model: InMemoryModel = serde_json::from_reader(index_file).map_err(|err| {
-                    eprintln!("ERROR: could not parse index file {index_path}: {err}");
-                })?;
-
-                server::start(&address, &model)
+                model = Arc::new(Mutex::new(serde_json::from_reader(index_file).map_err(
+                    |err| {
+                        eprintln!("ERROR: could not parse index file {index_path}: {err}");
+                    },
+                )?));
+            } else {
+                model = Arc::new(Mutex::new(Default::default()));
             }
+
+            {
+                let model = Arc::clone(&model);
+                thread::spawn(move || {
+                    let mut skipped = 0;
+
+                    add_folder_to_model(Path::new(&dir_path), Arc::clone(&model), &mut skipped)
+                        .unwrap();
+                    let model = model.lock().unwrap();
+
+                    save_model_as_json(&model, index_path).unwrap();
+                });
+            }
+            server::start(&address, Arc::clone(&model))
         }
         _ => {
             usage(&program);
