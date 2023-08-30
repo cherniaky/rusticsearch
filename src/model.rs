@@ -16,12 +16,12 @@ pub struct Doc {
 type Docs = HashMap<PathBuf, Doc>;
 
 #[derive(Default, Deserialize, Serialize)]
-pub struct InMemoryModel {
+pub struct Model {
     pub docs: Docs,
     df: DocFreq,
 }
 
-impl InMemoryModel {
+impl Model {
     fn remove_document(&mut self, file_path: &Path) {
         if let Some(doc) = self.docs.remove(file_path) {
             for t in doc.tf.keys() {
@@ -35,14 +35,14 @@ impl InMemoryModel {
         &mut self,
         file_path: &Path,
         last_modified: SystemTime,
-    ) -> Result<bool, ()> {
+    ) -> bool {
         if let Some(doc) = self.docs.get(file_path) {
-            return Ok(doc.last_modified < last_modified);
+            return doc.last_modified < last_modified;
         }
-        return Ok(true);
+        return true;
     }
 
-    pub fn search_query(&self, query: &[char]) -> Result<Vec<(PathBuf, f32)>, ()> {
+    pub fn search_query(&self, query: &[char]) -> Vec<(PathBuf, f32)> {
         let mut result = Vec::new();
         let tokens = Lexer::new(&query).collect::<Vec<_>>();
         for (path, doc) in &self.docs {
@@ -54,7 +54,7 @@ impl InMemoryModel {
         }
         result.sort_by(|(_, rank1), (_, rank2)| rank1.partial_cmp(rank2).unwrap());
         result.reverse();
-        Ok(result)
+        result
     }
 
     pub fn add_document(
@@ -62,7 +62,7 @@ impl InMemoryModel {
         file_path: PathBuf,
         last_modified: SystemTime,
         content: &[char],
-    ) -> Result<(), ()> {
+    ) {
         self.remove_document(&file_path);
 
         let mut tf = TermFreq::new();
@@ -93,7 +93,6 @@ impl InMemoryModel {
                 last_modified,
             },
         );
-        Ok(())
     }
 }
 
