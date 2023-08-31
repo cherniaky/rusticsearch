@@ -154,6 +154,16 @@ fn add_folder_to_model(
 
         let file_path = file.path();
 
+        let dot_file = file_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|s| s.starts_with("."))
+            .unwrap_or(false);
+
+        if dot_file {
+            continue 'next_file;
+        }
+
         let file_type = file.file_type().map_err(|err| {
             eprintln!(
                 "ERROR: could not determine type of file {file_path}: {err}",
