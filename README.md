@@ -4,5 +4,5 @@ It can index xml/xhtml and pdf files
 
 ```console
 $ cargo run serve ./folder
-# open http://localhost:6969/
+# open http://localhost:6969/ 
 ```
