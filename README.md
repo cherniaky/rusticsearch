@@ -6,3 +6,4 @@ It can index xml/xhtml and pdf files
 $ cargo run serve ./folder
 # open http://localhost:6969/ 
 ```
+ 
